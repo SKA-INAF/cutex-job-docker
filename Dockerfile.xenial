@@ -1,0 +1,191 @@
+FROM ubuntu:16.04
+MAINTAINER Simone Riggi "simone.riggi@gmail.com"
+
+######################################
+##   DEFINE CUSTOMIZABLE ARGS/ENVS
+######################################
+ARG USER_ARG=cutex
+ENV USER $USER_ARG
+
+ARG CHANGE_RUNUSER_ARG=1
+ENV CHANGE_RUNUSER $CHANGE_RUNUSER_ARG
+
+# - CUTEX OPTIONS
+ARG JOB_OPTIONS_ARG=""
+ENV JOB_OPTIONS $JOB_OPTIONS_ARG
+
+ARG INPUTFILE_ARG=""
+ENV INPUTFILE $INPUTFILE_ARG
+
+ARG JOB_DIR_ARG=""
+ENV JOB_DIR $JOB_DIR_ARG
+
+ARG JOB_OUTDIR_ARG=""
+ENV JOB_OUTDIR $JOB_OUTDIR_ARG
+
+# - RCLONE OPTIONS
+ARG MOUNT_RCLONE_VOLUME_ARG=0
+ENV MOUNT_RCLONE_VOLUME $MOUNT_RCLONE_VOLUME_ARG
+
+ARG MOUNT_VOLUME_PATH_ARG="/mnt/storage"
+ENV MOUNT_VOLUME_PATH $MOUNT_VOLUME_PATH_ARG
+
+ARG RCLONE_REMOTE_STORAGE_ARG="neanias-nextcloud"
+ENV RCLONE_REMOTE_STORAGE $RCLONE_REMOTE_STORAGE_ARG
+
+ARG RCLONE_REMOTE_STORAGE_PATH_ARG="."
+ENV RCLONE_REMOTE_STORAGE_PATH $RCLONE_REMOTE_STORAGE_PATH_ARG
+
+ARG RCLONE_MOUNT_WAIT_TIME_ARG=10
+ENV RCLONE_MOUNT_WAIT_TIME $RCLONE_MOUNT_WAIT_TIME_ARG
+
+ARG RCLONE_COPY_WAIT_TIME_ARG=30
+ENV RCLONE_COPY_WAIT_TIME $RCLONE_COPY_WAIT_TIME_ARG
+
+ENV PYTHONPATH_BASE ${PYTHONPATH}
+
+#################################
+###    CREATE DIRS
+#################################	
+# Define env variables
+ENV SOFTDIR=/opt/Software
+ENV SOFTDIR_SRCS=${SOFTDIR}/Sources
+ENV SOFTDIR_TAR=${SOFTDIR}/TarFiles
+
+##########################################################
+##     INSTALL SYS LIBS (IF NOT PRESENT IN BASE IMAGE
+##########################################################
+
+# - Install OS packages
+RUN apt-get update && apt-get install -y software-properties-common apt-utils curl binutils libtool pkg-config build-essential autoconf automake debconf-utils software-properties-common dpkg-dev git cmake wget bzip2 nano unzip locate less ca-certificates iputils-ping nmap dnsutils libcurl3 openssl libssl-dev uuid-dev libcap-dev libpcre3-dev util-linux openssh-client openssh-server
+
+# - Install python3.6
+RUN unset PYTHONPATH && add-apt-repository ppa:deadsnakes/ppa && apt-get update && apt-get install -y python3.6 python3.6-dev 
+
+# - Install pip3.6
+RUN unset PYTHONPATH && curl https://bootstrap.pypa.io/get-pip.py | python3.6
+
+# - Make python3.6 as the default
+RUN rm /usr/bin/python3 && ln -s /usr/bin/python3.6 /usr/bin/python3
+
+
+##########################################################
+##     CREATE USER
+##########################################################
+# - Create user & set permissions
+RUN adduser --disabled-password --gecos "" $USER && \
+    mkdir -p /home/$USER && \
+    chown -R $USER:$USER /home/$USER
+
+
+######################################
+##     INSTALL RCLONE
+######################################
+# - Install fuse
+RUN apt-get update && apt-get --no-install-recommends install -y fuse
+
+# - Allow other non-root users to mount fuse volumes
+RUN sed -i "s/#user_allow_other/user_allow_other/" /etc/fuse.conf
+
+# - Install rclone
+RUN curl https://rclone.org/install.sh | bash
+
+######################################
+##     INSTALL PYTHON MODULES
+######################################
+# - Install python3 modules
+RUN unset PYTHONPATH && pip3.6 install numpy astropy regions matplotlib shapely importlib-metadata
+
+# - Install python2 modules 
+RUN unset PYTHONPATH && pip install numpy
+
+# - Create astropy config dir
+#RUN mkdir /opt/astropy/config
+#ENV XDG_CONFIG_HOME /opt/astropy/config
+
+# - Set python executable var (required by GDL cmake)
+ENV PYTHON_EXECUTABLE=/usr/bin/python3.6
+
+######################################
+##     INSTALL GDL
+######################################
+# - Install GDL dependencies
+#   NB: libeccodes-dev not found in Ubuntu 16, so will set -DGRIB=OFF in gdl configuration
+RUN apt-get update && apt-get install -y libplplot-dev libgraphicsmagick++1-dev libgeotiff-dev libnetcdf-dev libhdf4-alt-dev libproj-dev libudunits2-dev libglpk-dev libshp-dev pslib-dev libncurses-dev libreadline-dev libgsl-dev libwxgtk3.0-dev libfftw3-dev libeigen3-dev
+
+# libeccodes-dev (NB: Missing in Ubuntu 16)
+
+# - Make source & build dirs
+ENV GDL_VERSION="1.0.1"
+#ENV GDL_VERSION="1.0.0"
+ENV GDL_URL="https://github.com/gnudatalanguage/gdl/archive/refs/tags/v${GDL_VERSION}.tar.gz"
+ENV GDL_SRC_DIR="${SOFTDIR_SRCS}/gdl-${GDL_VERSION}"
+ENV GDL_BUILD_DIR="${SOFTDIR_SRCS}/gdl-${GDL_VERSION}-build"	
+
+# - Download tar file
+WORKDIR ${SOFTDIR_TAR}
+RUN wget ${GDL_URL} -O gdl-${GDL_VERSION}.tar.gz
+
+# - Untar file
+WORKDIR ${SOFTDIR_SRCS}
+RUN tar xzvf ${SOFTDIR_TAR}/gdl-${GDL_VERSION}.tar.gz
+
+# - Configure, build and install
+RUN mkdir ${GDL_BUILD_DIR}
+WORKDIR ${GDL_BUILD_DIR}
+RUN cmake -DGRIB=OFF ${GDL_SRC_DIR} \
+  && make \
+  && make install
+
+# Clear source & tar 	
+RUN rm -rf ${GDL_SRC_DIR} && ${GDL_BUILD_DIR} \
+	&& rm -rf ${SOFTDIR_TAR}/gdl-${GDL_VERSION}.tar.gz || :
+
+# Set env var
+#ENV GDL_PATH=/usr/share/gnudatalanguage/lib/
+ENV GDL_PATH=/usr/local/share/gnudatalanguage/lib
+
+######################################
+##     INSTALL CUTEX
+######################################
+# - Set url & dir
+ENV CUTEX_URL="https://github.com/NEANIAS-Space/CuTEx.git"
+ENV CUTEX_DIR="${SOFTDIR}/CuTEx"
+
+# - Install
+WORKDIR ${SOFTDIR}
+RUN git clone ${CUTEX_URL}
+
+# - Post-installation 
+RUN cat $CUTEX_DIR/Code_CuTEx/CuTEx_100/phot_package_compile.lis | sed "s:DUMMYDIR:$CUTEX_DIR:"  > $CUTEX_DIR/Code_CuTEx/CuTEx_100/phot_package.lis
+
+######################################
+##   SETUP VARS 
+######################################
+
+##RUN echo "export PYTHONPATH=${PYTHONPATH_BASE}:$PYTHONPATH" >> /etc/profile.d/setupSoft.sh
+##RUN chmod +x /etc/profile.d/setupSoft.sh
+##RUN echo "PYTHONPATH_BASE=$PYTHONPATH"
+
+######################################
+##     RUN
+######################################
+# - Copy run script
+COPY run_job.sh /home/$USER/run_job.sh
+RUN chmod +x /home/$USER/run_job.sh
+
+COPY cutex_submitter.sh /home/$USER/cutex_submitter.sh
+RUN chmod +x /home/$USER/cutex_submitter.sh
+
+# - Copy other scripts
+COPY draw_img.py /home/$USER/draw_img.py
+RUN chmod +x /home/$USER/draw_img.py
+
+# - Add dir to PATH
+ENV PATH ${PATH}:/home/$USER
+
+
+# - Run container
+##CMD ["/home/$USER/run_job.sh --runuser=$USER --change-runuser=$CHANGE_RUNUSER --jobargs=\"$JOB_OPTIONS\" --inputfile=$INPUTFILE --jobdir=$JOB_DIR --joboutdir=$JOB_OUTDIR --mount-rclone-volume=$MOUNT_RCLONE_VOLUME --mount-volume-path=$MOUNT_VOLUME_PATH --rclone-remote-storage=$RCLONE_REMOTE_STORAGE --rclone-remote-storage-path=$RCLONE_REMOTE_STORAGE_PATH --rclone-mount-wait=$RCLONE_MOUNT_WAIT_TIME --rclone-copy-wait=$RCLONE_COPY_WAIT_TIME"]
+
+
