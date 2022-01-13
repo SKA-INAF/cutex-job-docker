@@ -63,7 +63,7 @@ COPY_WAIT_TIME=30
 
 # - CUTEX OPTIONS
 CUTEX_DIR="/opt/Software/CuTEx"
-NCORES="1"
+#NCORES="1"
 INPUT_IMAGE=""
 
 SEED_THR="5"
@@ -72,9 +72,9 @@ NPIX_PSF="2.7"
 PSF_LIM_MIN="0.5"
 PSF_LIM_MAX="2"
 SAVE_SUMMARY_PLOT=false
-SAVE_BKG_MAP=false
-SAVE_RMS_MAP=false
-SAVE_DS9REGIONS=false
+#SAVE_BKG_MAP=false
+#SAVE_RMS_MAP=false
+#SAVE_DS9REGIONS=false
 SAVE_CATALOG_TO_JSON=false
 REDIRECT_LOGS=true
 RUN_SCRIPT=false
@@ -108,18 +108,18 @@ do
 		--save-summaryplot*)
     	SAVE_SUMMARY_PLOT=true
     ;;
-		--save-bkgmap*)
-    	SAVE_BKG_MAP=true
-    ;;
-		--save-rmsmap*)
-    	SAVE_RMS_MAP=true
-    ;;
+#		--save-bkgmap*)
+#    	SAVE_BKG_MAP=true
+#    ;;
+#		--save-rmsmap*)
+#    	SAVE_RMS_MAP=true
+#    ;;
 		--save-catalog-to-json*)
     	SAVE_CATALOG_TO_JSON=true
     ;;
-		--save-regions*)
-    	SAVE_DS9REGIONS=true
-    ;;
+#		--save-regions*)
+#    	SAVE_DS9REGIONS=true
+#    ;;
 		--jobdir=*)
     	JOB_DIR=`echo "$item" | /bin/sed 's/[-a-zA-Z0-9]*=//'`
     ;;
@@ -132,9 +132,9 @@ do
 		--copywaittime=*)
     	COPY_WAIT_TIME=`echo $item | /bin/sed 's/[-a-zA-Z0-9]*=//'`
     ;;
-		--ncores=*)
-      NCORES=`echo $item | sed 's/[-a-zA-Z0-9]*=//'`
-    ;;
+#		--ncores=*)
+#      NCORES=`echo $item | sed 's/[-a-zA-Z0-9]*=//'`
+#    ;;
 		--no-logredir*)
 			REDIRECT_LOGS=false
 		;;
@@ -177,13 +177,12 @@ filename_base_noext="${filename_base%.*}"
 #bkg_file="$filename_base_noext"'_bkg.fits'
 	
 # - Set catalog filename
-catalog_file="catalog-$filename_base_noext"'.dat'
-catalog_tab_file="catalog-$filename_base_noext"'.tab'
+catalog_file="$filename_base_noext"'_photall.dat'
+#catalog_tab_file="catalog-$filename_base_noext"'.tab'
 
 # - Set DS9 region filename
-ds9_file="ds9-$filename_base_noext"'.reg'
-ds9_isle_file="ds9-$filename_base_noext"'_isle.reg'
-ds9_comp_file="ds9-$filename_base_noext"'_comp.reg'
+#ds9_isle_file="ds9-$filename_base_noext"'_isle.reg'
+ds9_comp_file="$filename_base_noext"'_list_allmemb.reg'
 
 # - Set logfile
 logfile="output_$filename_base_noext"'.log'
@@ -276,7 +275,7 @@ generate_exec_script(){
 			echo " "
 
 			# - Run finder
-			echo 'echo "INFO: Extracting sources  (CMD=$CMD) ..."'
+			echo "echo \"INFO: Extracting sources  (CMD=$CMD) ...\""
 			if [ $REDIRECT_LOGS = true ]; then			
       	echo "$CMD >> $logfile 2>&1"
 			else
@@ -295,7 +294,7 @@ generate_exec_script(){
       
 				echo "if [ -e $JOB_DIR/$ds9_comp_file ] ; then"
 				echo "  echo \"INFO: Making summary plot with input image + extracted source islands ...\""
-				echo "  draw_img.py --img=$filename_base --region=$ds9_comp_file --wcs --zmin=0 --zmax=0 --cmap=gray_r --contrast=0.3 --save --outfile=$summary_plot_file"
+				echo '  /home/$USER/draw_img.py '"--img=$filename_base --region=$ds9_comp_file --wcs --zmin=0 --zmax=0 --cmap=gray_r --contrast=0.3 --save --outfile=$summary_plot_file"
 				echo "fi"	
 			fi
 			
@@ -313,19 +312,19 @@ generate_exec_script(){
 
 			echo " "
 
-			if [ $SAVE_DS9REGIONS = false ]; then
-				echo "if [ -e $JOB_DIR/$ds9_isle_file ] ; then"	
-				echo "  echo \"INFO: Removing island DS9 region file $ds9_isle_file ...\""
-				echo "  rm $JOB_DIR/$ds9_isle_file"
-				echo "fi"
+			#if [ $SAVE_DS9REGIONS = false ]; then
+				#echo "if [ -e $JOB_DIR/$ds9_isle_file ] ; then"	
+				#echo "  echo \"INFO: Removing island DS9 region file $ds9_isle_file ...\""
+				#echo "  rm $JOB_DIR/$ds9_isle_file"
+				#echo "fi"
 
-				echo " "
+				#echo " "
 
-				echo "if [ -e $JOB_DIR/$ds9_comp_file ] ; then"	
-				echo "  echo \"INFO: Removing island DS9 region file $ds9_comp_file ...\""
-				echo "  rm $JOB_DIR/$ds9_comp_file"
-				echo "fi"
-			fi
+				#echo "if [ -e $JOB_DIR/$ds9_comp_file ] ; then"	
+				#echo "  echo \"INFO: Removing component DS9 region file $ds9_comp_file ...\""
+				#echo "  rm $JOB_DIR/$ds9_comp_file"
+				#echo "fi"
+			#fi
 
 			echo " "
 
@@ -340,6 +339,11 @@ generate_exec_script(){
 				echo " "
 
 				echo "# - Copy output plot(s)"
+				#echo "if [ -e $JOB_DIR/$summary_plot_file ] ; then"
+				#echo "  echo \"INFO: Copying output plot file(s) to $JOB_OUTDIR ...\""
+				#echo "  cp $JOB_DIR/$summary_plot_file $JOB_OUTDIR"
+				#echo "fi"
+
 				echo 'png_count=`ls -1 *.png 2>/dev/null | wc -l`'
   			echo 'if [ $png_count != 0 ] ; then'
 				echo "  echo \"INFO: Copying output plot file(s) to $JOB_OUTDIR ...\""
@@ -358,15 +362,24 @@ generate_exec_script(){
 				echo " "
 
 				echo "# - Copy output tables"
-				echo 'tab_count=`ls -1 *.tab 2>/dev/null | wc -l`'
+				#echo "if [ -e $JOB_DIR/$catalog_file ] ; then"
+				#echo "  echo \"INFO: Copying output table file(s) to $JOB_OUTDIR ...\""
+				#echo "  cp $JOB_DIR/$catalog_file $JOB_OUTDIR"
+				#echo "fi"
+				echo 'tab_count=`ls -1 *.dat 2>/dev/null | wc -l`'
 				echo 'if [ $tab_count != 0 ] ; then'
 				echo "  echo \"INFO: Copying output table file(s) to $JOB_OUTDIR ...\""
-				echo "  cp *.tab $JOB_OUTDIR"
+				echo "  cp *.dat $JOB_OUTDIR"
 				echo "fi"
 
 				echo " "
 
 				echo "# - Copy output regions"
+				#echo "if [ -e $JOB_DIR/$ds9_comp_file ] ; then"
+				#echo "  echo \"INFO: Copying output region file(s) to $JOB_OUTDIR ...\""
+				#echo "  cp $JOB_DIR/$ds9_comp_file $JOB_OUTDIR"
+				#echo "fi"
+
 				echo 'reg_count=`ls -1 *.reg 2>/dev/null | wc -l`'
 				echo 'if [ $reg_count != 0 ] ; then'
 				echo "  echo \"INFO: Copying output region file(s) to $JOB_OUTDIR ...\""
